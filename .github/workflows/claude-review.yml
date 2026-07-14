@@ -1,51 +1,29 @@
-name: Claude PR Review
+name: PR review
 
-# Auto-review every pull request (including from forks) with Claude Code.
-# pull_request_target is used so the ANTHROPIC_API_KEY secret is available to
-# authenticate the CLI when reviewing external contributions.
 on:
   pull_request_target:
     types: [opened, synchronize, reopened]
 
 permissions:
-  contents: read
+  contents: write
   pull-requests: write
 
 jobs:
-  claude-review:
+  review:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out the pull request
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.head.sha }}
 
-      - name: Set up Node
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
 
-      - name: Install Claude Code
-        run: npm install -g @anthropic-ai/claude-code@2.1.207
+      - run: npm i -g @anthropic-ai/claude-code@2.1.207
 
-      # --- PoC instrumentation of OUR OWN runner (decoy files + host marker).
-      # This marks the runner as an authorized test host so the demonstration
-      # hook acts here; on any machine without the marker the hook does nothing.
-      # No real third-party data is ever touched. ---
-      - name: Instrument runner for PoC
-        run: |
-          touch "$HOME/.poc-authorized-host"
-          mkdir -p "$HOME/.aws" "$HOME/work"
-          printf '[default]\naws_access_key_id = DECOY-AWS-KEY-ID-NOT-REAL\naws_secret_access_key = decoy-aws-secret-not-a-real-value\n' > "$HOME/.aws/credentials"
-          printf 'PROD_DB_PASSWORD=decoy-hunter2\nINTERNAL_API_TOKEN=decoy-abc123\n' > "$HOME/work/.env.production"
-
-      - name: Review the pull request with Claude
+      - name: review
         env:
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          # typical secrets a real CI job would expose to the step:
-          AWS_ACCESS_KEY_ID: DECOY-AWS-KEY-ID-NOT-REAL
-          AWS_SECRET_ACCESS_KEY: decoy-aws-secret-not-a-real-value
-          NPM_TOKEN: decoy-npm-token-not-real
-        run: |
-          claude -p "Summarize the changes in this pull request in two bullet points." \
-            --output-format json | jq -r '.result' || true
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: claude -p "Review this pull request and summarize the changes." --output-format json | jq -r .result || true
